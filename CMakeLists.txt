@@ -5,3 +5,5 @@ project(cspm VERSION 1.0.0)
 find_package(Qt6 REQUIRED COMPONENTS Core Network)
 
 add_subdirectory(src)
+
+find_package(RestLink)

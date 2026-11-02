@@ -16,7 +16,7 @@ public:
 
     int run(QCommandLineParser &parser) override
     {
-        static const QStringList commands = { "build" };
+        static const QStringList commands = { "update", "install", "upgrade", "remove", "build" };
         console.out << "available commands: " << commands.join(", ") << Qt::endl;
         return 0;
     }

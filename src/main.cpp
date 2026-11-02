@@ -4,6 +4,10 @@
 
 #include "core/command.h"
 #include "build/buildcommand.h"
+#include "pm/commands/updatecommand.h"
+#include "pm/commands/installcommand.h"
+#include "pm/commands/upgradecommand.h"
+#include "pm/commands/removecommand.h"
 
 Command *command(int argc, char *argv[])
 {
@@ -11,6 +15,18 @@ Command *command(int argc, char *argv[])
 
     if (commandName == QStringLiteral("build"))
         return Command::create<BuildCommand>();
+
+    if (commandName == QStringLiteral("update"))
+        return Command::create<UpdateCommand>();
+
+    if (commandName == QStringLiteral("install"))
+        return Command::create<InstallCommand>();
+
+    if (commandName == QStringLiteral("upgrade"))
+        return Command::create<UpgradeCommand>();
+
+    if (commandName == QStringLiteral("remove"))
+        return Command::create<RemoveCommand>();
 
     return Command::defaultCommand();
 }
@@ -26,11 +42,11 @@ int main(int argc, char *argv[])
     parser.addHelpOption();
 
     Command *cmd = command(argc, argv);
+    cmd->init(parser);
     {
-        cmd->init(parser);
-
         QStringList args = app.arguments();
-        args.replace(0, app.applicationFilePath());
+        if (args.size() > 1)
+            args.removeAt(1);
         parser.process(args);
     }
 

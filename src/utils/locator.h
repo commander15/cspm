@@ -1,9 +1,9 @@
-#ifndef TOOLLOCATOR_H
-#define TOOLLOCATOR_H
+#ifndef LOCATOR_H
+#define LOCATOR_H
 
 #include <QString>
 
-class ToolLocator
+class Locator
 {
 public:
     static QString findGit();
@@ -14,4 +14,4 @@ public:
     static QString findExecutable(const QString &name, const QStringList &paths);
 };
 
-#endif // TOOLLOCATOR_H
+#endif // LOCATOR_H

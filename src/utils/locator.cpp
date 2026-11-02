@@ -1,35 +1,35 @@
-#include "toollocator.h"
+#include "locator.h"
 
 #include <QStringList>
 #include <QStandardPaths>
 
-QString ToolLocator::findGit()
+QString Locator::findGit()
 {
     QStringList paths;
 
     return findExecutable("git", paths);
 }
 
-QString ToolLocator::findCmake()
+QString Locator::findCmake()
 {
     QStringList paths;
 
     return findExecutable("cmake", paths);
 }
 
-QString ToolLocator::findNinja()
+QString Locator::findNinja()
 {
     QStringList paths;
 
     return findExecutable("ninja", paths);
 }
 
-QString ToolLocator::findExecutable(const QString &name)
+QString Locator::findExecutable(const QString &name)
 {
     return findExecutable(name, QStringList());
 }
 
-QString ToolLocator::findExecutable(const QString &name, const QStringList &paths)
+QString Locator::findExecutable(const QString &name, const QStringList &paths)
 {
     // Search on provided paths first
     QString executable = QStandardPaths::findExecutable(name, paths);
@@ -39,5 +39,8 @@ QString ToolLocator::findExecutable(const QString &name, const QStringList &path
         executable = QStandardPaths::findExecutable(name);
 
     // As last ressort, return as is
-    return name;
+    if (executable.isEmpty())
+        executable = name;
+
+    return executable;
 }

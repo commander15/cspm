@@ -1,0 +1,63 @@
+#ifndef PACKAGEMANAGER_H
+#define PACKAGEMANAGER_H
+
+#include <core/command.h>
+#include <build/packagebuilder.h>
+
+#include <QObject>
+#include <QJsonObject>
+
+class Package;
+class PackageVersion;
+
+class PackageManager : public QObject
+{
+    Q_OBJECT
+
+public:
+    struct SearchOptions {
+        enum MatchType { ExactMatch, RelativeMatch, StrictMatch };
+        MatchType match = RelativeMatch;
+    };
+
+    struct InstallOptions {
+        bool dev = false;
+        bool cache = true;
+        bool lowBandwidth = false;
+    };
+
+    explicit PackageManager(Command *command, QObject *parent = nullptr);
+
+    QUrl registryUrl() const;
+
+    bool fetchIndex();
+    void reloadPackages();
+
+    QList<QPair<Package, QList<PackageVersion>>> search(const QString &query, const SearchOptions &options);
+    QPair<Package, QList<PackageVersion>> get(const QString &packageName);
+
+    int install(const QString &packageName, const InstallOptions &options);
+    int install(const QString &packageName, const QString &version, const InstallOptions &options);
+    int install(const Package &package, const PackageVersion &version, const InstallOptions &options);
+
+    QString packageInstallPrefix(const Package &package, const PackageVersion &version) const;
+    QString packageOutputDir(const Package &package) const;
+
+    QString getCMakeUserRegistryPath(const Package &package) const;
+    void registerWithCMakeUserRegistry(const Package &package, const PackageVersion &version);
+    void unregisterWithCMakeUserRegistry(const Package &package, const PackageVersion &version);
+
+private:
+    QUrl url(const QString &path) const;
+
+    ConsoleStreams console;
+    PackageBuilder builder;
+
+    QString m_packagesFile;
+    QString m_packagesDir;
+    QString m_packagesTarget;
+    QString m_packagesTemp;
+    QJsonObject m_packagesCache;
+};
+
+#endif // PACKAGEMANAGER_H
