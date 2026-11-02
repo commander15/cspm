@@ -50,6 +50,9 @@ public:
     QVariantHash data;
     QString type;
 
+    QString url() const;
+    QString sha256() const;
+
     bool hasData(const QString &key) const
     { return data.contains(key); }
 
@@ -85,8 +88,6 @@ public:
     QString system() const;
     QString arch() const;
     QString toolchain() const;
-    QString url() const;
-    QString sha256() const;
 };
 
 class PackageBuildData
@@ -119,6 +120,8 @@ public:
     QList<PackageArtifact> artifacts;
 
     PackageSource source() const;
+    PackageBinary binary() const;
+    QList<PackageBinary> binaries() const;
 
     Q_INVOKABLE void fill(const QJsonObject &data);
 };
@@ -127,6 +130,8 @@ class PackageContext {
 public:
     Package package;
     PackageVersion version;
+
+    QHash<QString, QString> environment;
 
     QString sourceDir;
     QString buildDir;

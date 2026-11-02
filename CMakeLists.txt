@@ -6,4 +6,25 @@ find_package(Qt6 REQUIRED COMPONENTS Core Network)
 
 add_subdirectory(src)
 
-find_package(RestLink)
+set(CPACK_PACKAGE_NAME "cspm")
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A serverless, CDN-based C++ package manager")
+set(CPACK_PACKAGE_VENDOR "Amadou Benjamain")
+set(CPACK_PACKAGE_CONTACT "Amadou Benjamain <amadoubenjamain@gmail.com>")
+
+set(CPACK_GENERATOR ZIP)
+
+if (UNIX)
+    list(APPEND CPACK_GENERATOR TGZ DEB)
+
+    set(DEBIAN_DEPS
+        "libqt6core6t64 (>= 6.8.0)"
+        "libqt6network6 (>= 6.8.0)"
+        "git"
+        "7zip"
+        "cmake (>= 3.30.0)"
+    )
+    string(JOIN ", " CPACK_DEBIAN_PACKAGE_DEPENDS ${DEBIAN_DEPS})
+endif()
+
+include(CPack)

@@ -104,6 +104,7 @@ public:
 
     static QJsonValue parse(const QString &fileName, JSONError *error = nullptr);
     static QJsonValue parse(QIODevice *device, JSONError *error = nullptr);
+    static QJsonValue parse(const QByteArray &json, JSONError *error = nullptr);
     static void fill(void *object, const QMetaObject &metaObject, const QJsonObject &data, JSONError *error = nullptr);
 
     static QString fieldName(const QString &propertyName);

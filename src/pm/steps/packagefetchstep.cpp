@@ -1,9 +1,15 @@
 #include "packagefetchstep.h"
 
-#include <QDir>
+#include <utils/http.h>
 
-PackageFetchStep::PackageFetchStep(Command *command)
+#include <QDir>
+#include <QFileInfo>
+#include <QDateTime>
+#include <QCryptographicHash>
+
+PackageFetchStep::PackageFetchStep(const QString &step, Command *command)
     : PackageStep(command)
+    , m_step(step)
 {}
 
 PackageResult PackageFetchStep::run(const PackageContext &context)
@@ -22,10 +28,66 @@ PackageResult PackageFetchStep::run(const PackageContext &context)
             dir.removeRecursively();
     }
 
-    const PackageSource source = context.version.source();
+    auto download = [this, &context](const PackageArtifact &artifact, QString &fileName) {
+        const QUrl url(artifact.url());
+        if (!url.isValid()) {
+            return PackageResult::make(-1);
+        }
 
-    if (source.type == "git") {
-        return clone(source.repository(), source.tag(), GitTag, context.sourceDir, context.lowBandwidth);
+        fileName = context.sourceDir + '/' + url.fileName();
+        return PackageFetchStep::download(url, artifact.sha256(), fileName, context.lowBandwidth);
+    };
+
+    if (m_step.startsWith("source")) {
+        const PackageSource source = context.version.source();
+
+        if (source.type == "git") {
+            return clone(source.repository(), source.tag(), GitTag, context.sourceDir, context.lowBandwidth);
+        }
+
+        if (source.data.contains("url")) {
+            QString fileName;
+
+            PackageResult result = download(source, fileName);
+            if (!result.success()) return result;
+
+            return decompress(fileName, context.sourceDir);
+        }
+    }
+
+    if (m_step.startsWith("binar")) {
+        PackageBinary binary = context.version.binary();
+        QString fileName; // Will be populated by download() on success
+
+        PackageResult result = download(binary, fileName);
+        if (!result.success()) {
+            return result;
+        }
+
+        if (fileName.endsWith(".zip") || fileName.endsWith(".tar.gz")) {
+            return decompress(fileName, context.installDir);
+        } else {
+            // Ensure the build directory exists
+            QDir installDir(context.installDir);
+            if (!installDir.exists() && !installDir.mkpath(".")) {
+                return PackageResult::make(1, "Failed to create install directory: " + context.installDir);
+            }
+
+            // For a raw binary, construct the full destination file path inside buildDir
+            QFileInfo sourceInfo(fileName);
+            QString targetPath = installDir.filePath(sourceInfo.fileName());
+
+            // Remove old target if it exists so copy doesn't fail
+            if (QFile::exists(targetPath)) {
+                QFile::remove(targetPath);
+            }
+
+            bool copied = QFile::copy(fileName, targetPath);
+            if (!copied) {
+                return PackageResult::make(1, "Failed to copy binary to build directory: " + targetPath);
+            }
+            return PackageResult::make(0);
+        }
     }
 
     return PackageResult::make(-1);
@@ -58,6 +120,179 @@ PackageResult PackageFetchStep::clone(const QString &repo, const QString &id, Gi
             d.removeRecursively();
     }
     return result;
+}
+
+PackageResult PackageFetchStep::download(const QUrl &url, const QString &outputDir, bool lowBandwidth)
+{
+    return download(url, QString(), outputDir + '/' + url.fileName(), lowBandwidth);
+}
+
+PackageResult PackageFetchStep::download(const QUrl &url, const QString &sha, const QString &fileName, bool lowBandwidth)
+{
+    // 1. Ensure the containing directory exists before attempting to open the file
+    QFileInfo fileInfo(fileName);
+    QDir dir = fileInfo.dir();
+    if (!dir.exists() && !dir.mkpath(".")) {
+        return PackageResult::make(1, "Failed to create containing directory: " + dir.absolutePath());
+    }
+
+    // 2. Low-bandwidth caching check: if enabled, check if the file exists and is recent
+    // (Considered valid if it exists and is less than 24 hours old)
+    bool useCached = false;
+    if (lowBandwidth && fileInfo.exists()) {
+        QDateTime lastModified = fileInfo.lastModified();
+        if (lastModified.secsTo(QDateTime::currentDateTime()) < 86400) { // 24 hours threshold
+            useCached = true;
+        }
+    }
+
+    // 3. If using cache, verify its SHA checksum if provided, then return success early
+    if (useCached) {
+        if (!sha.isEmpty()) {
+            QFile cachedFile(fileName);
+            if (cachedFile.open(QIODevice::ReadOnly)) {
+                QByteArray calculatedHash = QCryptographicHash::hash(cachedFile.readAll(), QCryptographicHash::Sha256);
+                cachedFile.close();
+
+                QString actualHashHex = QString::fromLatin1(calculatedHash.toHex());
+                if (actualHashHex.compare(sha, Qt::CaseInsensitive) == 0) {
+                    return PackageResult::make(0); // Valid cache hit!
+                }
+            }
+        } else {
+            return PackageResult::make(0); // Valid cache hit without checksum constraint
+        }
+    }
+
+    // 4. Normal mode or cache miss/expired: download fresh copy (always overrides)
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadWrite | QIODevice::WriteOnly)) {
+        return PackageResult::make(1, "Failed to open target file for writing: " + file.errorString());
+    }
+
+    PackageResult result = download(url, sha, &file, lowBandwidth);
+
+    if (result.success()) {
+        file.flush();
+        file.close();
+    } else {
+        file.remove();
+    }
+
+    return result;
+}
+
+PackageResult PackageFetchStep::download(const QUrl &url, const QString &sha, QIODevice *device, bool lowBandWidth)
+{
+    const HttpResponse response = HTTP::get(url, device, console);
+
+    if (!response.success()) {
+        int errorCode = response.statusCode != 0 ? response.statusCode : -1;
+        return PackageResult::make(errorCode, "Download failed from URL: " + url.toString() + " (" + response.errorString + ")");
+    }
+
+    // Verify SHA checksum if provided directly from the device
+    if (!sha.isEmpty()) {
+        // Ensure we can read from the device from the beginning
+        if (!device->isReadable()) {
+            return PackageResult::make(-1, "Device is not open for reading/verification.");
+        }
+
+        // Seek back to the start of the written data
+        if (device->isSequential()) {
+            return PackageResult::make(-1, "Device is sequential and cannot be rewound for checksum verification.");
+        }
+        device->seek(0);
+
+        QByteArray calculatedHash = QCryptographicHash::hash(device->readAll(), QCryptographicHash::Sha256);
+
+        // Rewind again so that subsequent steps (like extraction) can read from the beginning of the device
+        device->seek(0);
+
+        QString actualHashHex = QString::fromLatin1(calculatedHash.toHex());
+        if (actualHashHex.compare(sha.contains(':') ? sha.section(':', -1) : sha, Qt::CaseInsensitive) != 0) {
+            return PackageResult::make(-1, QString("Checksum verification failed!\nExpected: %1\nGot: %2")
+                                           .arg(sha, actualHashHex));
+        }
+    }
+
+    return PackageResult::make(0);
+}
+
+PackageResult PackageFetchStep::decompress(const QString &fileName, const QString &outputDir)
+{
+    QDir dir(outputDir);
+    if (!dir.exists() && !dir.mkpath(".")) {
+        return PackageResult::make(1, "Failed to create output directory: " + outputDir);
+    }
+
+    // 1. Extract the outer archive
+    QStringList args;
+    args << "x" << fileName << "-y" << QString("-o%1").arg(outputDir);
+
+    QProcess *tool = runProgram("7z", args);
+    if (!tool || tool->exitCode() != 0) {
+        return PackageResult::make(-1, "Failed to extract archive using 7z.");
+    }
+
+    // 2. Handle inner .tar if it was a .tar.gz / .tgz
+    if (fileName.endsWith(".tar.gz", Qt::CaseInsensitive) || fileName.endsWith(".tgz", Qt::CaseInsensitive)) {
+        QFileInfo fileInfo(fileName);
+        QString tarFileName = fileInfo.completeBaseName(); // e.g., foo.tar
+        QString innerTarPath = dir.filePath(tarFileName);
+
+        if (QFile::exists(innerTarPath)) {
+            QStringList tarArgs;
+            tarArgs << "x" << innerTarPath << "-y" << QString("-o%1").arg(outputDir);
+
+            QProcess *tarTool = runProgram("7z", tarArgs);
+            if (tarTool && tarTool->exitCode() == 0) {
+                QFile::remove(innerTarPath); // Clean up intermediate .tar
+            } else {
+                return PackageResult::make(-1, "Failed to extract inner tar archive.");
+            }
+        }
+    }
+
+    // 3. Flattening check: If extraction created a single top-level directory, lift its contents up
+    dir.refresh();
+    QStringList entries = dir.entryList(QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot);
+
+    // If there is only ONE entry in outputDir, and that entry is a directory...
+    if (entries.size() == 1) {
+        QString subDirPath = dir.filePath(entries.first());
+        QFileInfo subDirInfo(subDirPath);
+
+        if (subDirInfo.isDir()) {
+            QDir subDir(subDirPath);
+            QStringList subEntries = subDir.entryList(QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot);
+
+            // Move everything from the subdirectory up to outputDir
+            for (const QString &entry : subEntries) {
+                QString oldPath = subDir.filePath(entry);
+                QString newPath = dir.filePath(entry);
+
+                // Remove existing destination if it clashes
+                if (QFileInfo(newPath).isDir()) {
+                    QDir(newPath).removeRecursively();
+                } else {
+                    QFile::remove(newPath);
+                }
+
+                QFile::rename(oldPath, newPath);
+            }
+
+            // Remove the now-empty wrapper subdirectory
+            subDir.removeRecursively();
+        }
+    }
+
+    return PackageResult::make(0);
+}
+
+PackageFetchStep *PackageFetchStep::make(const QString &step, Command *command)
+{
+    return new PackageFetchStep(step.isEmpty() ? "sources" : step.toLower(), command);
 }
 
 PackageResult PackageFetchStep::gitFetch(const QString &repo, const QString &id, GitIdType type, const QString &dir, bool lowBandwidth)

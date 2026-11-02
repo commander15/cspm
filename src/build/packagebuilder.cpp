@@ -10,7 +10,7 @@ PackageBuilder::PackageBuilder(Command *command, QObject *parent)
     : QObject{parent}
     , console(command->console)
 {
-    steps.append(new PackageFetchStep(command));
+    steps.append(PackageFetchStep::make("sources", command));
     steps.append(PackageCMakeStep::make("configure", command));
     steps.append(PackageCMakeStep::make("build", command));
     steps.append(PackageCMakeStep::make("test", command));

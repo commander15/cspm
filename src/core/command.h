@@ -6,10 +6,21 @@
 
 class QCommandLineParser;
 
-struct ConsoleStreams {
+class ConsoleStreams {
+public:
     QTextStream &out;
     QTextStream &err;
     QTextStream &in;
+
+    static ConsoleStreams null() {
+        static QByteArray dummyBuffer;
+        static QTextStream nullOut(&dummyBuffer);
+        static QTextStream nullErr(&dummyBuffer);
+        static QTextStream nullIn(&dummyBuffer);
+
+        dummyBuffer.clear();
+        return ConsoleStreams{ nullOut, nullErr, nullIn };
+    }
 };
 
 class Command

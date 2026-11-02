@@ -58,7 +58,13 @@ PackageResult PackageCMakeStep::configure(const PackageContext &context)
     var("CMAKE_INSTALL_PREFIX", context.installDir);
     var("CPACK_PACKAGE_DIRECTORY", context.packageDir);
 
-    // 4. Append extra arguments
+    // 4. Append variables from env
+    const QStringList vars = context.environment.keys();
+    for (const QString &varName : vars)
+        if (varName.startsWith("CMAKE"))
+            var(varName, context.environment.value(varName));
+
+    // 5. Append extra arguments
     for (const QString &arg : std::as_const(build.arguments)) {
         args << arg;
     }
@@ -120,9 +126,15 @@ QProcessEnvironment PackageCMakeStep::environment(const PackageContext &context)
 {
     auto build = (context.dev ? context.version.build.dev : context.version.build.runtime);
 
-    // Set up environment (start with system env, then overlay manifest env)
+    // Set up environment (start with system env)
     QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
 
+    // Override with content env
+    const QStringList variables = context.environment.keys();
+    for (const QString &var : variables)
+        environment.insert(var, context.environment.value(var));
+
+    // Override with build env
     for (auto it = build.environment.begin(); it != build.environment.end(); ++it) {
         environment.insert(it.key(), it.value().toString());
     }

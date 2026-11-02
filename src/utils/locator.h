@@ -8,7 +8,6 @@ class Locator
 public:
     static QString findGit();
     static QString findCmake();
-    static QString findNinja();
 
     static QString findExecutable(const QString &name);
     static QString findExecutable(const QString &name, const QStringList &paths);

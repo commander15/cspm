@@ -2,13 +2,14 @@
 #define PACKAGEMANAGER_H
 
 #include <core/command.h>
-#include <build/packagebuilder.h>
+#include <pm/steps/packagestep.h>
 
 #include <QObject>
 #include <QJsonObject>
 
 class Package;
 class PackageVersion;
+class PackageManagerSettings;
 
 class PackageManager : public QObject
 {
@@ -31,6 +32,7 @@ public:
     QUrl registryUrl() const;
 
     bool fetchIndex();
+    bool fetchMetas();
     void reloadPackages();
 
     QList<QPair<Package, QList<PackageVersion>>> search(const QString &query, const SearchOptions &options);
@@ -51,13 +53,19 @@ private:
     QUrl url(const QString &path) const;
 
     ConsoleStreams console;
-    PackageBuilder builder;
+    Command *command;
 
     QString m_packagesFile;
     QString m_packagesDir;
     QString m_packagesTarget;
     QString m_packagesTemp;
     QJsonObject m_packagesCache;
+};
+
+
+class PackageManagerSettings
+{
+public:
 };
 
 #endif // PACKAGEMANAGER_H

@@ -19,11 +19,18 @@ qt_add_executable(cspm main.cpp
     pm/packagemanager.h pm/packagemanager.cpp
     utils/http.h utils/http.cpp
     utils/string.h utils/string.cpp
+    pm/steps/packageinstallstep.h pm/steps/packageinstallstep.cpp
 )
 
 target_compile_definitions(cspm PRIVATE
     CSPM_VERSION="${PROJECT_VERSION}"
-    CSPM_REMOTE="https://cdn.jsdelivr.net/gh/commander15/commander-registry@main"
 )
 
+if (CSPM_REGISTRY_URL)
+    target_compile_definitions(cspm PRIVATE CSPM_REGISTRY_URL="${CSPM_REGISTRY_URL}")
+endif()
+
 target_link_libraries(cspm PRIVATE Qt6::Core Qt6::Network)
+
+include(GNUInstallDirs)
+install(TARGETS cspm RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

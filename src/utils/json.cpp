@@ -23,7 +23,12 @@ QJsonValue JSON::parse(QIODevice *device, JSONError *error)
         return QJsonObject();
     }
 
-    QJsonDocument doc = QJsonDocument::fromJson(device->readAll(), error == nullptr ? nullptr : &error->parseError);
+    return parse(device->readAll(), error);
+}
+
+QJsonValue JSON::parse(const QByteArray &json, JSONError *error)
+{
+    QJsonDocument doc = QJsonDocument::fromJson(json, error == nullptr ? nullptr : &error->parseError);
     if (error != nullptr && error->parseError.error != QJsonParseError::NoError) {
         error->errorCode = 3;
         return QJsonObject();

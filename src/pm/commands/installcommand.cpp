@@ -51,6 +51,9 @@ int InstallCommand::run(QCommandLineParser &parser)
         else
             result = manager.install(name, version, options);
 
+        // We add a new line and flush
+        console.out << Qt::endl;
+
         if (result != 0) return result;
     }
 

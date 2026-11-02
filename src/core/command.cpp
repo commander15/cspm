@@ -19,7 +19,8 @@ void Command::init(QCommandLineParser &parser)
 
 Command *Command::defaultCommand()
 {
-    return new DefaultCommand();
+    static DefaultCommandProvider instance;
+    return instance.get();
 }
 
 void Command::exit(bool exitCode)

@@ -2,6 +2,7 @@
 
 #include <QStringList>
 #include <QStandardPaths>
+#include <QCoreApplication>
 
 QString Locator::findGit()
 {
@@ -17,13 +18,6 @@ QString Locator::findCmake()
     return findExecutable("cmake", paths);
 }
 
-QString Locator::findNinja()
-{
-    QStringList paths;
-
-    return findExecutable("ninja", paths);
-}
-
 QString Locator::findExecutable(const QString &name)
 {
     return findExecutable(name, QStringList());
@@ -33,6 +27,10 @@ QString Locator::findExecutable(const QString &name, const QStringList &paths)
 {
     // Search on provided paths first
     QString executable = QStandardPaths::findExecutable(name, paths);
+
+    // Try using current binary dir
+    if (executable.isEmpty())
+        executable = QStandardPaths::findExecutable(name, { qApp->applicationDirPath() });
 
     // Later, try using default paths
     if (executable.isEmpty())

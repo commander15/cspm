@@ -11,5 +11,11 @@ void UpdateCommand::init(QCommandLineParser &parser)
 
 int UpdateCommand::run(QCommandLineParser &parser)
 {
-    return (manager.fetchIndex() ? 0 : -1);
+    if (!manager.fetchIndex())
+        return 1;
+
+    if (!manager.fetchMetas())
+        return 2;
+
+    return 0;
 }
