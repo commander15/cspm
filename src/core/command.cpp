@@ -2,10 +2,7 @@
 #include "command_p.h"
 
 Command::Command()
-    : out(stdout)
-    , err(stderr)
-    , in(stdin)
-    , console({ .out = out, .err = err, .in = in })
+    : console(ConsoleStreams::std())
 {
 }
 

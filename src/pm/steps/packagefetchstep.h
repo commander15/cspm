@@ -14,6 +14,7 @@ public:
 
     PackageFetchStep(const QString &step, Command *command);
 
+    QString name() const override { return QStringLiteral("Fetch"); }
     PackageResult run(const PackageContext &context) override;
 
     PackageResult clone(const QString &repo, const QString &id, GitIdType type, const QString &dir, bool lowBandwidth);

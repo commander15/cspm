@@ -1,0 +1,42 @@
+#ifndef ERROR_CODES_H
+#define ERROR_CODES_H
+
+#define CSPM_OK 0
+
+// General & System Errors (100 - 199)
+#define CSPM_ERR_UNKNOWN              101
+#define CSPM_ERR_INVALID_ARGUMENT     102
+#define CSPM_ERR_FILE_IO              103
+#define CSPM_ERR_PERMISSION_DENIED    104
+#define CSPM_ERR_CONFIG_PARSE         105
+
+// Registry & Metadata Errors (200 - 299)
+#define CSPM_ERR_REGISTRY_UNREACHABLE 201
+#define CSPM_ERR_PACKAGE_NOT_FOUND    202
+#define CSPM_ERR_VERSION_NOT_FOUND    203
+#define CSPM_ERR_MANIFEST_PARSE       204
+#define CSPM_ERR_CHECKSUM_MISMATCH    205
+#define CSPM_ERR_UNSUPPORTED_PLATFORM 206
+
+// Network & Download Errors (300 - 399)
+#define CSPM_ERR_DOWNLOAD_FAILED      301
+#define CSPM_ERR_HTTP_STATUS          302
+
+// Extraction & Archive Errors (400 - 499)
+#define CSPM_ERR_EXTRACT_FAILED       401
+#define CSPM_ERR_UNSUPPORTED_FORMAT   402
+#define CSPM_ERR_ARCHIVE_CORRUPT      403
+
+// Source & Git Errors (500 - 599)
+#define CSPM_ERR_GIT_NOT_FOUND        501
+#define CSPM_ERR_GIT_CLONE_FAILED     502
+#define CSPM_ERR_GIT_CHECKOUT_FAILED  503
+
+// Build & CMake Errors (600 - 699)
+#define CSPM_ERR_CMAKE_CONFIG_FAILED  601
+#define CSPM_ERR_CMAKE_BUILD_FAILED   602
+#define CSPM_ERR_CMAKE_TEST_FAILED    603
+#define CSPM_ERR_CMAKE_INSTALL_FAILED 604
+#define CSPM_ERR_NINJA_NOT_FOUND      605
+
+#endif // ERROR_CODES_H

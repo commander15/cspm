@@ -51,6 +51,11 @@ int BuildCommand::buildOne(const QString &metaFile, const QString &versionFile, 
     Package package = JSON::make<Package>(metaFile);
     PackageVersion version = JSON::make<PackageVersion>(versionFile);
 
+    console.out << "Building " << package.name;
+    if (!version.version.isEmpty())
+        console.out << '@' << version.version;
+    console.out << "..." << Qt::endl;
+
     PackageBuild *build = m_builder.build(package, version, options.outputDir, { .dev = options.dev, .cache = options.cache });
     QObject::connect(build, &PackageBuild::finished, build, [build, this](const PackageResult &result) {
         build->deleteLater();
@@ -94,7 +99,12 @@ int BuildCommand::buildAll(const QString &indexFile, const QString &packagesDir,
         const Package package = JSON::make<Package>(jsonFile("meta", name));
         const PackageVersion version = JSON::make<PackageVersion>(jsonFile(versionString, name));
 
-        PackageBuild *build = m_builder.build(package, version, options.outputDir + '/' + name, { .dev = options.dev, .cache = options.cache });
+        console.out << "Building " << package.name;
+        if (!version.version.isEmpty())
+            console.out << '@' << version.version;
+        console.out << "..." << Qt::endl;
+
+        PackageBuild *build = m_builder.build(package, version, options.outputDir, { .dev = options.dev, .cache = options.cache });
         QObject::connect(build, &PackageBuild::finished, build, [build, &finished, &total, this](const PackageResult &result) {
             build->deleteLater();
             ++finished;

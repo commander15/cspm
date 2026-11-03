@@ -1,6 +1,8 @@
 #ifndef PACKAGE_H
 #define PACKAGE_H
 
+#include <core/error.h>
+
 #include <QObject>
 #include <QVariantHash>
 
@@ -51,7 +53,10 @@ public:
     QString type;
 
     QString url() const;
+
     QString sha256() const;
+    QString checksum() const;
+    QString checksumAlgorithm() const;
 
     bool hasData(const QString &key) const
     { return data.contains(key); }
@@ -151,7 +156,7 @@ public:
     int exitCode() const { return m_exitCode; }
     PackageResult &exit(int exitCode) { m_exitCode = exitCode; return *this; }
 
-    QString message() const { return (m_messages.isEmpty() ? QString() : m_messages.first()); }
+    QString message() const { return (m_messages.isEmpty() ? Error::errorString(m_exitCode) : m_messages.first()); }
     PackageResult &message(const QString &msg) { m_messages = { msg }; return *this; }
 
     QStringList messages() const { return m_messages; }

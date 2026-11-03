@@ -6,6 +6,7 @@
 class PackageCMakeStep : public PackageStep
 {
 public:
+    QString name() const override;
     PackageResult run(const PackageContext &context) override;
 
     PackageResult configure(const PackageContext &context);

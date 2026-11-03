@@ -20,6 +20,8 @@ qt_add_executable(cspm main.cpp
     utils/http.h utils/http.cpp
     utils/string.h utils/string.cpp
     pm/steps/packageinstallstep.h pm/steps/packageinstallstep.cpp
+    core/error.h core/error.cpp
+    core/error_codes.h
 )
 
 target_compile_definitions(cspm PRIVATE

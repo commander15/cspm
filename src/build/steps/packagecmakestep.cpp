@@ -7,6 +7,14 @@ PackageCMakeStep::PackageCMakeStep(const QString &step, Command *command)
     , m_step(step)
 {}
 
+QString PackageCMakeStep::name() const
+{
+    QString step = m_step;
+    if (!step.isEmpty())
+        step[0] = step.at(0).toUpper();
+    return QStringLiteral("CMake %1").arg(step);
+}
+
 PackageResult PackageCMakeStep::run(const PackageContext &context)
 {
     QDir dir(context.buildDir);

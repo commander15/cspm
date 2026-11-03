@@ -59,13 +59,6 @@ void PackageBuild::start()
     // ToDo: add env vars, args and vars from cspm.conf
     //context.version.build.variables.insert("CMAKE_PREFIX_PATH", "/opt/Qt/6.10.2/gcc_64");
 
-    PackageResult result;
-
-    for (PackageStep *step : std::as_const(m_builder->steps)) {
-        result = step->run(context);
-        if (!result.success())
-            break;
-    }
-
+    PackageResult result = PackageStep::runAll(context, m_builder->steps, m_builder->console);
     emit finished(result);
 }

@@ -42,7 +42,7 @@ HttpResponse HTTP::get(const QUrl &url, QIODevice *device, const ConsoleStreams 
     // Stack-allocated local event loop (safe, temporary, cleans up automatically)
     QEventLoop loop;
 
-    console.out << "downloading: " << url.fileName() << Qt::endl;
+    console.out << "downloading: " << url.toString() << Qt::endl;
     QObject::connect(reply, &QNetworkReply::downloadProgress, device, [console](qint64 down, qint64 total) {
         if (total > 0) {
             qint64 percent = (down * 100) / total;

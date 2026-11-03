@@ -35,8 +35,11 @@ public:
     bool fetchMetas();
     void reloadPackages();
 
-    QList<QPair<Package, QList<PackageVersion>>> search(const QString &query, const SearchOptions &options);
-    QPair<Package, QList<PackageVersion>> get(const QString &packageName);
+    QList<QPair<Package, QList<PackageVersion>>> search(const QString &query, const SearchOptions &options) const;
+    QPair<Package, QList<PackageVersion>> get(const QString &packageName) const;
+    QPair<Package, QList<PackageVersion>> get(const QString &packageName, const QString &versionFilter) const;
+
+    QStringList prepareInstall(const QStringList &packageNames) const;
 
     int install(const QString &packageName, const InstallOptions &options);
     int install(const QString &packageName, const QString &version, const InstallOptions &options);
@@ -48,6 +51,8 @@ public:
     QString getCMakeUserRegistryPath(const Package &package) const;
     void registerWithCMakeUserRegistry(const Package &package, const PackageVersion &version);
     void unregisterWithCMakeUserRegistry(const Package &package, const PackageVersion &version);
+
+    static bool versionMatch(const QString &version, const QString &filter);
 
 private:
     QUrl url(const QString &path) const;

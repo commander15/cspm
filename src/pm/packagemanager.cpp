@@ -12,6 +12,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QQueue>
 
 PackageManager::PackageManager(Command *command, QObject *parent)
     : QObject{parent}
@@ -57,7 +58,7 @@ QUrl PackageManager::registryUrl() const
 
 bool PackageManager::fetchIndex()
 {
-    const HttpResponse response = HTTP::get(url("/index.json"));
+    const HttpResponse response = HTTP::get(url("/index.json"), console);
 
     if (!response.success()) {
         console.err << response.errorString << Qt::endl;
@@ -93,7 +94,7 @@ bool PackageManager::fetchMetas()
         const QString packageLocalPath = m_packagesDir + '/' + packageName;
         QDir(packageLocalPath).mkpath(".");
 
-        const HttpResponse response = HTTP::get(url(packageRemotePath + "/meta.json"));
+        const HttpResponse response = HTTP::get(url(packageRemotePath + "/meta.json"), console);
         if (!response.success()) {
             console.err << response.errorString << Qt::endl;
             continue;
@@ -114,7 +115,7 @@ bool PackageManager::fetchMetas()
             HttpResponse response;
 
             for (const QString &remoteName : remoteNames) {
-                response = HTTP::get(url(packageRemotePath + '/' + remoteName + ".json"));
+                response = HTTP::get(url(packageRemotePath + '/' + remoteName + ".json"), console);
                 if (response.success())
                     break;
             }
@@ -144,7 +145,7 @@ void PackageManager::reloadPackages()
     m_packagesCache = registry.value("packages").toObject();
 }
 
-QList<QPair<Package, QList<PackageVersion>>> PackageManager::search(const QString &query, const SearchOptions &options)
+QList<QPair<Package, QList<PackageVersion>>> PackageManager::search(const QString &query, const SearchOptions &options) const
 {
     QList<QPair<Package, QList<PackageVersion>>> results;
 
@@ -168,7 +169,17 @@ QList<QPair<Package, QList<PackageVersion>>> PackageManager::search(const QStrin
     return results;
 }
 
-QPair<Package, QList<PackageVersion> > PackageManager::get(const QString &packageName)
+QPair<Package, QList<PackageVersion> > PackageManager::get(const QString &packageName) const
+{
+    if (!packageName.contains('@'))
+        return get(packageName, QString());
+
+    const QString name = packageName.section('@', 0, 0);
+    const QString version = packageName.section('@', -1, -1);
+    return get(name, version);
+}
+
+QPair<Package, QList<PackageVersion> > PackageManager::get(const QString &packageName, const QString &versionFilter) const
 {
     if (!m_packagesCache.contains(packageName))
         return {};
@@ -184,12 +195,212 @@ QPair<Package, QList<PackageVersion> > PackageManager::get(const QString &packag
 
         const QStringList versionStrings = object.value("versions").toVariant().toStringList();
         for (const QString &versionStr : versionStrings) {
+            if (!versionFilter.isEmpty() && !versionMatch(versionStr, versionFilter)) {
+                continue;
+            }
+
             const PackageVersion version = JSON::make<PackageVersion>(packageDir + '/' + versionStr + ".json");
             versions.append(version);
         }
     }
 
     return { package, versions };
+}
+
+QStringList PackageManager::prepareInstall(const QStringList &packageNames) const
+{
+    // Helper structure for parsed package requests
+    struct PackageRequest {
+        QString name;
+        QString versionFilter;
+    };
+
+    // 1. Parse input package strings (handling scoped packages like "@scope/pkg@1.0.0")
+    QList<PackageRequest> initialRequests;
+    for (const QString &item : packageNames) {
+        int atIdx = -1;
+        if (item.startsWith('@')) {
+            atIdx = item.indexOf('@', 1);
+        } else {
+            atIdx = item.indexOf('@');
+        }
+
+        PackageRequest req;
+        if (atIdx != -1) {
+            req.name = item.left(atIdx);
+            req.versionFilter = item.mid(atIdx + 1).trimmed();
+        } else {
+            req.name = item;
+            req.versionFilter = QString();
+        }
+        initialRequests.append(req);
+    }
+
+    // Graph structures
+    // Key: "packageName@version" (unique node per package version)
+    QMap<QString, PackageVersion> nodeVersions;
+    // Adjacency list: node -> set of its direct dependencies ("name@version")
+    QMap<QString, QSet<QString>> adjList;
+    // In-degree map for topological sorting (Kahn's algorithm)
+    QMap<QString, int> inDegree;
+
+    // Helper lambda to compare versions for sorting / selecting latest
+    auto compareVersions = [](const QString &v1, const QString &v2) -> int {
+        QStringList parts1 = v1.split('.');
+        QStringList parts2 = v2.split('.');
+        int maxLen = qMax(parts1.size(), parts2.size());
+        for (int i = 0; i < maxLen; ++i) {
+            int n1 = i < parts1.size() ? parts1[i].toInt() : 0;
+            int n2 = i < parts2.size() ? parts2[i].toInt() : 0;
+            if (n1 != n2) return n1 - n2;
+        }
+        return 0;
+    };
+
+    // Queue for BFS graph discovery
+    QQueue<PackageRequest> queue;
+    for (const auto &req : initialRequests) {
+        queue.enqueue(req);
+    }
+
+    QSet<QString> visitedRequests; // Prevents redundant queue processing for exact same requests
+
+    // 2. Build the dependency graph recursively
+    while (!queue.isEmpty()) {
+        PackageRequest req = queue.dequeue();
+
+        QString requestKey = req.name + "@" + req.versionFilter;
+        if (visitedRequests.contains(requestKey)) {
+            continue;
+        }
+        visitedRequests.insert(requestKey);
+
+        // Fetch package metadata and matching versions
+        QPair<Package, QList<PackageVersion>> pkgData = get(req.name, req.versionFilter);
+        const QList<PackageVersion> &availableVersions = pkgData.second;
+        if (availableVersions.isEmpty()) {
+            continue; // Skip if no matching version found
+        }
+
+        // If a specific version filter was provided, match it. Otherwise, pick the latest available version.
+        PackageVersion targetVersion;
+        if (!req.versionFilter.isEmpty()) {
+            // Find the version that matches the filter (if multiple, pick the highest matching)
+            QList<PackageVersion> matching;
+            for (const auto &v : availableVersions) {
+                if (versionMatch(v.version, req.versionFilter)) {
+                    matching.append(v);
+                }
+            }
+            if (matching.isEmpty()) continue;
+
+            // Sort matching versions ascending to pick the latest
+            std::sort(matching.begin(), matching.end(), [compareVersions](const PackageVersion &a, const PackageVersion &b) {
+                return compareVersions(a.version, b.version) < 0;
+            });
+            targetVersion = matching.last(); // Pick highest matching version
+        } else {
+            // No filter: pick the absolute latest version available
+            QList<PackageVersion> sorted = availableVersions;
+            std::sort(sorted.begin(), sorted.end(), [compareVersions](const PackageVersion &a, const PackageVersion &b) {
+                return compareVersions(a.version, b.version) < 0;
+            });
+            targetVersion = sorted.last();
+        }
+
+        QString nodeKey = req.name + "@" + targetVersion.version;
+        if (!nodeVersions.contains(nodeKey)) {
+            nodeVersions[nodeKey] = targetVersion;
+            if (!inDegree.contains(nodeKey)) {
+                inDegree[nodeKey] = 0;
+            }
+        }
+
+        // Process dependencies of this version
+        for (const PackageDependency &dep : targetVersion.dependencies) {
+            // Resolve dependency version constraint (e.g., dep.name, dep.versionConstraint)
+            QString depNodeKeySearch = dep.name() + "@" + dep.version;
+
+            // Queue the dependency to be resolved and added to the graph
+            queue.enqueue({dep.name(), dep.version});
+
+            // Find the matching dependency version object to get its exact version string
+            QPair<Package, QList<PackageVersion>> depPkgData = get(dep.name(), dep.version);
+            if (!depPkgData.second.isEmpty()) {
+                QList<PackageVersion> depVersions = depPkgData.second;
+                std::sort(depVersions.begin(), depVersions.end(), [compareVersions](const PackageVersion &a, const PackageVersion &b) {
+                    return compareVersions(a.version, b.version) < 0;
+                });
+                PackageVersion depTargetVersion = depVersions.last(); // Latest satisfying constraint
+                QString depNodeKey = dep.name() + "@" + depTargetVersion.version;
+
+                if (!nodeVersions.contains(depNodeKey)) {
+                    nodeVersions[depNodeKey] = depTargetVersion;
+                    if (!inDegree.contains(depNodeKey)) {
+                        inDegree[depNodeKey] = 0;
+                    }
+                }
+
+                // Edge direction: Dependency must be installed BEFORE Dependent.
+                // In Kahn's algorithm or dependency sorting: Dependents point to their dependencies,
+                // meaning dependency has in-degree incremented by dependents, OR we reverse order.
+                // Standard convention: Dependent -> Dependency means Dependency has incoming edge from Dependent.
+                if (!adjList[nodeKey].contains(depNodeKey)) {
+                    adjList[nodeKey].insert(depNodeKey);
+                    inDegree[depNodeKey]++;
+                }
+            }
+        }
+    }
+
+    // 3. Perform Topological Sort (Kahn's Algorithm) with version tie-breaking (oldest first, latest last)
+    QStringList ordered;
+    QList<QString> zeroInDegreeQueue;
+
+    for (auto it = inDegree.begin(); it != inDegree.end(); ++it) {
+        if (it.value() == 0) {
+            zeroInDegreeQueue.append(it.key());
+        }
+    }
+
+    while (!zeroInDegreeQueue.isEmpty()) {
+        // Sort zero-in-degree nodes such that if same package name has multiple versions,
+        // older version is processed/installed before newer version ("latest must be installed last").
+        std::sort(zeroInDegreeQueue.begin(), zeroInDegreeQueue.end(), [compareVersions](const QString &a, const QString &b) {
+            QStringList partsA = a.split('@');
+            QStringList partsB = b.split('@');
+            QString nameA = partsA.first();
+            QString nameB = partsB.first();
+            if (nameA == nameB) {
+                return compareVersions(partsA.last(), partsB.last()) < 0; // Older first
+            }
+            return nameA < nameB;
+        });
+
+        QString current = zeroInDegreeQueue.takeFirst();
+        ordered.append(current);
+
+        // Decrease in-degree for neighbors
+        for (const QString &neighbor : adjList[current]) {
+            inDegree[neighbor]--;
+            if (inDegree[neighbor] == 0) {
+                zeroInDegreeQueue.append(neighbor);
+            }
+        }
+    }
+
+    // If topological sort output doesn't match all nodes (due to circular dependency),
+    // append remaining nodes safely as fallback.
+    if (ordered.size() < nodeVersions.size()) {
+        for (auto it = nodeVersions.begin(); it != nodeVersions.end(); ++it) {
+            if (!ordered.contains(it.key())) {
+                ordered.append(it.key());
+            }
+        }
+    }
+
+    std::reverse(ordered.begin(), ordered.end());
+    return ordered;
 }
 
 int PackageManager::install(const QString &packageName, const InstallOptions &options)
@@ -238,8 +449,24 @@ int PackageManager::install(const Package &package, const PackageVersion &versio
         .lowBandwidth = options.lowBandwidth
     };
 
+    for (const PackageDependency &dep : version.dependencies) {
+        int result = 0;
+
+        if (dep.version.isEmpty()) {
+            result = PackageManager::install(dep.name(), options);
+        } else {
+            auto match = get(dep.name(), dep.version);
+            if (match.second.isEmpty())
+                result = PackageManager::install(dep.name(), options);
+            else
+                result = PackageManager::install(match.first, match.second.first(), options);
+        }
+
+        if (result != 0) return result;
+    }
+
     PackageInstallStep install(this, command);
-    return install.run(context).exitCode();
+    return PackageStep::runOne("Installing " + package.name + '@' + version.version, context, &install, console).exitCode();
 }
 
 QString PackageManager::packageInstallPrefix(const Package &package, const PackageVersion &version) const
@@ -400,6 +627,83 @@ void PackageManager::unregisterWithCMakeUserRegistry(const Package &package, con
         RegDeleteKeyW(HKEY_CURRENT_USER, subKey.c_str());
     }
 #endif
+}
+
+bool PackageManager::versionMatch(const QString &version, const QString &filter)
+{
+    // 1. Clean and trim the filter string
+    QString cleanedFilter = filter.trimmed();
+    if (cleanedFilter.isEmpty()) {
+        return true; // No filter means everything matches
+    }
+
+    // 2. Parse operator and target version from the filter
+    QString op = "=";
+    QString targetStr = cleanedFilter;
+
+    if (cleanedFilter.startsWith(">=")) {
+        op = ">=";
+        targetStr = cleanedFilter.mid(2).trimmed();
+    } else if (cleanedFilter.startsWith("<=")) {
+        op = "<=";
+        targetStr = cleanedFilter.mid(2).trimmed();
+    } else if (cleanedFilter.startsWith(">")) {
+        op = ">";
+        targetStr = cleanedFilter.mid(1).trimmed();
+    } else if (cleanedFilter.startsWith("<")) {
+        op = "<";
+        targetStr = cleanedFilter.mid(1).trimmed();
+    } else if (cleanedFilter.startsWith("=")) {
+        op = "=";
+        targetStr = cleanedFilter.mid(1).trimmed();
+    }
+
+    // 3. Helper lambda to strip leading 'v'/'V' and parse into numeric components
+    auto parseVersionParts = [](const QString &vStr) -> QVector<int> {
+        QString s = vStr.trimmed();
+        if (s.startsWith('v') || s.startsWith('V')) {
+            s.remove(0, 1);
+        }
+
+        QStringList parts = s.split('.');
+        QVector<int> numericParts;
+        numericParts.reserve(parts.size());
+        for (const QString &part : parts) {
+            bool ok = false;
+            int val = part.toInt(&ok);
+            numericParts.append(ok ? val : 0);
+        }
+        return numericParts;
+    };
+
+    QVector<int> v1Parts = parseVersionParts(version);
+    QVector<int> v2Parts = parseVersionParts(targetStr);
+
+    // 4. Compare version parts with zero-padding for differing lengths (e.g., "1.0" vs "1.0.0")
+    int maxLen = qMax(v1Parts.size(), v2Parts.size());
+    int cmp = 0;
+
+    for (int i = 0; i < maxLen; ++i) {
+        int n1 = i < v1Parts.size() ? v1Parts[i] : 0;
+        int n2 = i < v2Parts.size() ? v2Parts[i] : 0;
+
+        if (n1 < n2) {
+            cmp = -1;
+            break;
+        } else if (n1 > n2) {
+            cmp = 1;
+            break;
+        }
+    }
+
+    // 5. Evaluate based on the operator
+    if (op == ">=") return (cmp >= 0);
+    if (op == "<=") return (cmp <= 0);
+    if (op == ">")  return (cmp > 0);
+    if (op == "<")  return (cmp < 0);
+    if (op == "=")  return (cmp == 0);
+
+    return false;
 }
 
 QUrl PackageManager::url(const QString &path) const

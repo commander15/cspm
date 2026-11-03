@@ -22,7 +22,7 @@ void InstallCommand::init(QCommandLineParser &parser)
 
 int InstallCommand::run(QCommandLineParser &parser)
 {
-    const QStringList packages = parser.positionalArguments();
+    const QStringList packages = manager.prepareInstall(parser.positionalArguments());
 
     if (packages.isEmpty())
         return 0;
@@ -34,22 +34,7 @@ int InstallCommand::run(QCommandLineParser &parser)
     };
 
     for (const QString &package : packages) {
-        QString name;
-        QString version;
-        int result = 0;
-
-        if (package.contains('@')) {
-            int index = package.indexOf('@');
-            name = package.mid(0, index);
-            version = package.mid(index + 1); // Skip the '@' character!
-        } else {
-            name = package;
-        }
-
-        if (version.isEmpty())
-            result = manager.install(name, options);
-        else
-            result = manager.install(name, version, options);
+        int result = manager.install(package, options);
 
         // We add a new line and flush
         console.out << Qt::endl;

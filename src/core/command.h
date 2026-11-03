@@ -12,6 +12,13 @@ public:
     QTextStream &err;
     QTextStream &in;
 
+    static ConsoleStreams std() {
+        static QTextStream out(stdout);
+        static QTextStream err(stderr);
+        static QTextStream in(stdin);
+        return ConsoleStreams{ out, err, in };
+    }
+
     static ConsoleStreams null() {
         static QByteArray dummyBuffer;
         static QTextStream nullOut(&dummyBuffer);
@@ -43,10 +50,6 @@ protected:
     int exec();
 
 private:
-    QTextStream out;
-    QTextStream err;
-    QTextStream in;
-
     QEventLoop m_loop;
 };
 

@@ -16,6 +16,7 @@ public:
     PackageStep(Command *command);
     virtual ~PackageStep() = default;
 
+    virtual QString name() const { return QStringLiteral("Step"); }
     virtual PackageResult run(const PackageContext &context) = 0;
 
     template<typename Step>
@@ -38,6 +39,12 @@ public:
         QScopedPointer<Step> step(Step::make(name, Command::defaultCommand()));
         return step->run(context);
     }
+
+    static PackageResult runOne(const PackageContext &context, PackageStep *step, const ConsoleStreams &console);
+    static PackageResult runOne(const QString &title, const PackageContext &context, PackageStep *step, const ConsoleStreams &console);
+
+    static PackageResult runAll(const PackageContext &context, const QList<PackageStep *> &steps, const ConsoleStreams &console);
+    static PackageResult runAll(const QString &title, const PackageContext &context, const QList<PackageStep *> &steps, const ConsoleStreams &console);
 
 protected:
     QProcess *runProgram(const QString &program, const QStringList &arguments, const QString &workingDir = QString());

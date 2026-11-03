@@ -1,5 +1,6 @@
 #include "packagefetchstep.h"
 
+#include <core/error.h>
 #include <utils/http.h>
 
 #include <QDir>
@@ -31,7 +32,7 @@ PackageResult PackageFetchStep::run(const PackageContext &context)
     auto download = [this, &context](const PackageArtifact &artifact, QString &fileName) {
         const QUrl url(artifact.url());
         if (!url.isValid()) {
-            return PackageResult::make(-1);
+            return PackageResult::make(CSPM_ERR_DOWNLOAD_FAILED);
         }
 
         fileName = context.sourceDir + '/' + url.fileName();
@@ -70,7 +71,7 @@ PackageResult PackageFetchStep::run(const PackageContext &context)
             // Ensure the build directory exists
             QDir installDir(context.installDir);
             if (!installDir.exists() && !installDir.mkpath(".")) {
-                return PackageResult::make(1, "Failed to create install directory: " + context.installDir);
+                return PackageResult::make(CSPM_ERR_PERMISSION_DENIED, "Failed to create install directory: " + context.installDir);
             }
 
             // For a raw binary, construct the full destination file path inside buildDir
@@ -84,13 +85,13 @@ PackageResult PackageFetchStep::run(const PackageContext &context)
 
             bool copied = QFile::copy(fileName, targetPath);
             if (!copied) {
-                return PackageResult::make(1, "Failed to copy binary to build directory: " + targetPath);
+                return PackageResult::make(CSPM_ERR_PERMISSION_DENIED, "Failed to copy binary to build directory: " + targetPath);
             }
-            return PackageResult::make(0);
+            return PackageResult::make(CSPM_OK);
         }
     }
 
-    return PackageResult::make(-1);
+    return PackageResult::make(CSPM_ERR_DOWNLOAD_FAILED);
 }
 
 PackageResult PackageFetchStep::clone(const QString &repo, const QString &id, GitIdType type, const QString &dir, bool lowBandwidth)
@@ -100,16 +101,16 @@ PackageResult PackageFetchStep::clone(const QString &repo, const QString &id, Gi
         // Smart update path: fetch updates without re-cloning
         PackageResult fetch = gitFetch(repo, id, type, dir, lowBandwidth);
         if (fetch.exitCode() != 0) {
-            return PackageResult::make(fetch.exitCode(), "Git fetch failed for cached repository.");
+            return PackageResult::make(CSPM_ERR_GIT_CLONE_FAILED, "Git fetch failed for cached repository.");
         }
 
         // Checkout the requested tag, branch, or commit
         QProcess *checkout = runProgram("git", QStringList() << "-C" << dir << "checkout" << "-f" << id);
         if (checkout->exitCode() != 0) {
-            return PackageResult::make(checkout->exitCode(), "Failed to checkout ref: " + id);
+            return PackageResult::make(CSPM_ERR_GIT_CHECKOUT_FAILED, "Failed to checkout ref: " + id);
         }
 
-        return PackageResult::make(0);
+        return PackageResult::make(CSPM_OK);
     }
 
     // 2. Fresh clone path (when directory doesn't exist yet)
@@ -133,7 +134,7 @@ PackageResult PackageFetchStep::download(const QUrl &url, const QString &sha, co
     QFileInfo fileInfo(fileName);
     QDir dir = fileInfo.dir();
     if (!dir.exists() && !dir.mkpath(".")) {
-        return PackageResult::make(1, "Failed to create containing directory: " + dir.absolutePath());
+        return PackageResult::make(CSPM_ERR_PERMISSION_DENIED, "Failed to create containing directory: " + dir.absolutePath());
     }
 
     // 2. Low-bandwidth caching check: if enabled, check if the file exists and is recent
@@ -156,18 +157,18 @@ PackageResult PackageFetchStep::download(const QUrl &url, const QString &sha, co
 
                 QString actualHashHex = QString::fromLatin1(calculatedHash.toHex());
                 if (actualHashHex.compare(sha, Qt::CaseInsensitive) == 0) {
-                    return PackageResult::make(0); // Valid cache hit!
+                    return PackageResult::make(CSPM_OK); // Valid cache hit!
                 }
             }
         } else {
-            return PackageResult::make(0); // Valid cache hit without checksum constraint
+            return PackageResult::make(CSPM_OK); // Valid cache hit without checksum constraint
         }
     }
 
     // 4. Normal mode or cache miss/expired: download fresh copy (always overrides)
     QFile file(fileName);
     if (!file.open(QIODevice::ReadWrite | QIODevice::WriteOnly)) {
-        return PackageResult::make(1, "Failed to open target file for writing: " + file.errorString());
+        return PackageResult::make(CSPM_ERR_FILE_IO, "Failed to open target file for writing: " + file.errorString());
     }
 
     PackageResult result = download(url, sha, &file, lowBandwidth);
@@ -187,20 +188,19 @@ PackageResult PackageFetchStep::download(const QUrl &url, const QString &sha, QI
     const HttpResponse response = HTTP::get(url, device, console);
 
     if (!response.success()) {
-        int errorCode = response.statusCode != 0 ? response.statusCode : -1;
-        return PackageResult::make(errorCode, "Download failed from URL: " + url.toString() + " (" + response.errorString + ")");
+        return PackageResult::make(CSPM_ERR_HTTP_STATUS, "Download failed from URL: " + url.toString() + " (" + response.errorString + ")");
     }
 
     // Verify SHA checksum if provided directly from the device
     if (!sha.isEmpty()) {
         // Ensure we can read from the device from the beginning
         if (!device->isReadable()) {
-            return PackageResult::make(-1, "Device is not open for reading/verification.");
+            return PackageResult::make(CSPM_ERR_FILE_IO, "Device is not open for reading/verification.");
         }
 
         // Seek back to the start of the written data
         if (device->isSequential()) {
-            return PackageResult::make(-1, "Device is sequential and cannot be rewound for checksum verification.");
+            return PackageResult::make(CSPM_ERR_FILE_IO, "Device is sequential and cannot be rewound for checksum verification.");
         }
         device->seek(0);
 
@@ -211,19 +211,19 @@ PackageResult PackageFetchStep::download(const QUrl &url, const QString &sha, QI
 
         QString actualHashHex = QString::fromLatin1(calculatedHash.toHex());
         if (actualHashHex.compare(sha.contains(':') ? sha.section(':', -1) : sha, Qt::CaseInsensitive) != 0) {
-            return PackageResult::make(-1, QString("Checksum verification failed!\nExpected: %1\nGot: %2")
+            return PackageResult::make(CSPM_ERR_CHECKSUM_MISMATCH, QString("Checksum verification failed!\nExpected: %1\nGot: %2")
                                            .arg(sha, actualHashHex));
         }
     }
 
-    return PackageResult::make(0);
+    return PackageResult::make(CSPM_OK);
 }
 
 PackageResult PackageFetchStep::decompress(const QString &fileName, const QString &outputDir)
 {
     QDir dir(outputDir);
     if (!dir.exists() && !dir.mkpath(".")) {
-        return PackageResult::make(1, "Failed to create output directory: " + outputDir);
+        return PackageResult::make(CSPM_ERR_PERMISSION_DENIED, "Failed to create output directory: " + outputDir);
     }
 
     // 1. Extract the outer archive
@@ -232,7 +232,7 @@ PackageResult PackageFetchStep::decompress(const QString &fileName, const QStrin
 
     QProcess *tool = runProgram("7z", args);
     if (!tool || tool->exitCode() != 0) {
-        return PackageResult::make(-1, "Failed to extract archive using 7z.");
+        return PackageResult::make(CSPM_ERR_EXTRACT_FAILED, "Failed to extract archive using 7z.");
     }
 
     // 2. Handle inner .tar if it was a .tar.gz / .tgz
@@ -249,7 +249,7 @@ PackageResult PackageFetchStep::decompress(const QString &fileName, const QStrin
             if (tarTool && tarTool->exitCode() == 0) {
                 QFile::remove(innerTarPath); // Clean up intermediate .tar
             } else {
-                return PackageResult::make(-1, "Failed to extract inner tar archive.");
+                return PackageResult::make(CSPM_ERR_EXTRACT_FAILED, "Failed to extract inner tar archive.");
             }
         }
     }
@@ -268,7 +268,7 @@ PackageResult PackageFetchStep::decompress(const QString &fileName, const QStrin
             QStringList subEntries = subDir.entryList(QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot);
 
             // Move everything from the subdirectory up to outputDir
-            for (const QString &entry : subEntries) {
+            for (const QString &entry : std::as_const(subEntries)) {
                 QString oldPath = subDir.filePath(entry);
                 QString newPath = dir.filePath(entry);
 
@@ -287,7 +287,7 @@ PackageResult PackageFetchStep::decompress(const QString &fileName, const QStrin
         }
     }
 
-    return PackageResult::make(0);
+    return PackageResult::make(CSPM_OK);
 }
 
 PackageFetchStep *PackageFetchStep::make(const QString &step, Command *command)
@@ -320,10 +320,10 @@ PackageResult PackageFetchStep::gitFetch(const QString &repo, const QString &id,
     }
 
     if (!fetchSuccess) {
-        return PackageResult::make(-1, "Resilient Fallback: Network failed repeatedly during chunked fetch.");
+        return PackageResult::make(CSPM_ERR_GIT_CHECKOUT_FAILED, "Resilient Fallback: Network failed repeatedly during chunked fetch.");
     }
 
-    return PackageResult::make(0);
+    return PackageResult::make(CSPM_OK);
 }
 
 PackageResult PackageFetchStep::cloneFastly(const QString &repo, const QString &id, GitIdType type, const QString &dir)
@@ -340,7 +340,7 @@ PackageResult PackageFetchStep::cloneFastly(const QString &repo, const QString &
 
     QProcess *git = runProgram("git", args);
     if (git->exitCode() != 0) {
-        return PackageResult::make(git->exitCode(), "Git clone failed with exit code " + QString::number(git->exitCode()));
+        return PackageResult::make(CSPM_ERR_GIT_CLONE_FAILED, "Git clone failed with exit code " + QString::number(git->exitCode()));
     }
 
     // If it's a specific commit hash, git clone --branch won't work directly,
@@ -348,11 +348,11 @@ PackageResult PackageFetchStep::cloneFastly(const QString &repo, const QString &
     if (type == GitCommit && !id.isEmpty()) {
         QProcess *checkout = runProgram("git", QStringList() << "-C" << dir << "checkout" << id);
         if (checkout->exitCode() != 0) {
-            return PackageResult::make(checkout->exitCode(), "Failed to checkout commit hash: " + id);
+            return PackageResult::make(CSPM_ERR_GIT_CHECKOUT_FAILED, "Failed to checkout commit hash: " + id);
         }
     }
 
-    return PackageResult::make(0);
+    return PackageResult::make(CSPM_OK);
 }
 
 PackageResult PackageFetchStep::cloneSlowly(const QString &repo, const QString &id, GitIdType type, const QString &dir)
@@ -361,7 +361,7 @@ PackageResult PackageFetchStep::cloneSlowly(const QString &repo, const QString &
 
     // Step A: Initialize repository manually
     if (runProgram("git", QStringList() << "-C" << dir << "init" << "-b" << "main")->exitCode() != 0) {
-        return PackageResult::make(-1, "Resilient Fallback: git init failed.");
+        return PackageResult::make(CSPM_ERR_GIT_CLONE_FAILED, "Resilient Fallback: git init failed.");
     }
 
     // Step B: Set up remote origin with network tuning flags for poor connections
@@ -369,7 +369,7 @@ PackageResult PackageFetchStep::cloneSlowly(const QString &repo, const QString &
     remoteArgs << "-C" << dir << "-c" << "http.lowSpeedLimit=500" << "-c" << "http.lowSpeedTime=60"
                << "remote" << "add" << "origin" << repo;
     if (runProgram("git", remoteArgs)->exitCode() != 0) {
-        return PackageResult::make(-1, "Resilient Fallback: git remote add failed.");
+        return PackageResult::make(CSPM_ERR_GIT_CLONE_FAILED, "Resilient Fallback: git remote add failed.");
     }
 
     // Step C: Execute step-by-step fetching with retry loop
@@ -383,8 +383,8 @@ PackageResult PackageFetchStep::cloneSlowly(const QString &repo, const QString &
 
     QProcess *checkout = runProgram("git", QStringList() << "-C" << dir << "checkout" << "-f" << checkoutRef);
     if (checkout->exitCode() != 0) {
-        return PackageResult::make(checkout->exitCode(), "Failed to checkout final target ref: " + id);
+        return PackageResult::make(CSPM_ERR_GIT_CHECKOUT_FAILED, "Failed to checkout final target ref: " + id);
     }
 
-    return PackageResult::make(0);
+    return PackageResult::make(CSPM_OK);
 }

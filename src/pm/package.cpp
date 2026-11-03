@@ -33,8 +33,34 @@ QString PackageArtifact::url() const
 
 QString PackageArtifact::sha256() const
 {
-    const QString sha = data.value(data.contains("sha256") ? "sha256" : "sha").toString();
-    return (sha.contains(':') ? sha.section(':', -1) : sha);
+    if (checksumAlgorithm() == "sha256")
+        return checksum();
+
+    return QString();
+}
+
+QString PackageArtifact::checksum() const
+{
+    if (!data.contains("checksum"))
+        return QString();
+
+    QString checksum = data.value("checksum").toString();
+    if (checksum.contains(':'))
+        return checksum.section(':', -1, -1);
+
+    return checksum;
+}
+
+QString PackageArtifact::checksumAlgorithm() const
+{
+    if (!data.contains("checksum"))
+        return QString();
+
+    QString checksum = data.value("checksum").toString();
+    if (checksum.contains(':'))
+        return checksum.section(':', 0, 0);
+
+    return (checksum.isEmpty() ? QString() : QStringLiteral("sha256"));
 }
 
 PackageSource PackageArtifact::toSource() const
