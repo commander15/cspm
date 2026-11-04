@@ -2,6 +2,7 @@
 
 #include <utils/http.h>
 #include <utils/json.h>
+#include <utils/db.h>
 
 #include <pm/steps/packagefetchstep.h>
 #include <pm/steps/packageinstallstep.h>
@@ -25,7 +26,7 @@ PackageManager::PackageManager(Command *command, QObject *parent)
             d.mkpath(".");
     };
 
-    const QString home = QDir::homePath() + "/.cspm";
+    const QString home = rootDir();
 
     m_packagesFile = home + "/registry/index.json";
 
@@ -56,6 +57,14 @@ QUrl PackageManager::registryUrl() const
 #endif
 }
 
+QString PackageManager::rootDir()
+{
+    QDir dir(QDir::homePath() + "/.cspm");
+    if (!dir.exists() && !dir.mkpath("."))
+        return QString();
+    return dir.absolutePath();
+}
+
 bool PackageManager::fetchIndex()
 {
     const HttpResponse response = HTTP::get(url("/index.json"), console);
@@ -63,6 +72,38 @@ bool PackageManager::fetchIndex()
     if (!response.success()) {
         console.err << response.errorString << Qt::endl;
         return false;
+    }
+
+    JSONError error;
+    QJsonObject index = JSON::parse(response.data, &error).toObject();
+    if (error.isValid()) {
+        console.err << error.errorString() << Qt::endl;
+        return false;
+    }
+
+    const QJsonObject packages = index.value("packages").toObject();
+    const QStringList packageNames = packages.keys();
+    for (const QString &packageName : packageNames) {
+        const QJsonObject packageObject = packages.value(packageName).toObject();
+
+        int packageId = -1;
+        DB::select("id FROM packages WHERE name = ?", { packageName }, [&packageId](const QVariantHash &record) {
+            packageId = record.value("id").toInt();
+        });
+
+        QVariantMap data;
+        data.insert("name", packageName);
+        data.insert("display_name", packageObject.value("display_name"));
+        data.insert("description", packageObject.value("description"));
+
+        if (data.contains("cmake_name"))
+            data.insert("cmake_name", packageObject.value("cmake_name"));
+
+        if (packageId == -1) {
+            DB::insert("packages", data, &packageId);
+        } else {
+            DB::update("packages", data, "id = " + QString::number(packageId));
+        }
     }
 
     QFile file(m_packagesFile);
@@ -148,6 +189,9 @@ void PackageManager::reloadPackages()
 QList<QPair<Package, QList<PackageVersion>>> PackageManager::search(const QString &query, const SearchOptions &options) const
 {
     QList<QPair<Package, QList<PackageVersion>>> results;
+
+    // QSqlQuery sql = DB::run("SELECT * FROM packages LEFT JOIN versions ON (versions.package_id = packages.id) WHERE packages.name LIKE '%?%'", { query }, console);
+    //
 
     QStringList keys = m_packagesCache.keys();
     keys.sort();

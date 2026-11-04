@@ -1,4 +1,5 @@
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
@@ -22,6 +23,8 @@ qt_add_executable(cspm main.cpp
     pm/steps/packageinstallstep.h pm/steps/packageinstallstep.cpp
     core/error.h core/error.cpp
     core/error_codes.h
+    resources.qrc
+    utils/db.h utils/db.cpp
 )
 
 target_compile_definitions(cspm PRIVATE
@@ -32,7 +35,7 @@ if (CSPM_REGISTRY_URL)
     target_compile_definitions(cspm PRIVATE CSPM_REGISTRY_URL="${CSPM_REGISTRY_URL}")
 endif()
 
-target_link_libraries(cspm PRIVATE Qt6::Core Qt6::Network)
+target_link_libraries(cspm PRIVATE Qt6::Core Qt6::Network Qt6::Sql)
 
 include(GNUInstallDirs)
 install(TARGETS cspm RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

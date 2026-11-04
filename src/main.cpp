@@ -4,10 +4,15 @@
 
 #include "core/command.h"
 #include "build/buildcommand.h"
+#include "utils/db.h"
+
+#include "pm/packagemanager.h"
 #include "pm/commands/updatecommand.h"
 #include "pm/commands/installcommand.h"
 #include "pm/commands/upgradecommand.h"
 #include "pm/commands/removecommand.h"
+
+bool initDatabase(const QString &path);
 
 Command *command(int argc, char *argv[])
 {
@@ -37,6 +42,10 @@ int main(int argc, char *argv[])
     app.setApplicationName("cspm");
     app.setApplicationVersion(CSPM_VERSION);
 
+    if (!initDatabase(PackageManager::rootDir() + "/database.db")) {
+        return 1;
+    }
+
     QCommandLineParser parser;
     parser.setApplicationDescription("...");
     parser.addHelpOption();
@@ -57,4 +66,17 @@ int main(int argc, char *argv[])
     });
 
     return app.exec();
+}
+
+bool initDatabase(const QString &path)
+{
+    QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE");
+    db.setDatabaseName(path);
+
+    if (!db.open()) {
+        //ConsoleStreams::std().out << db.lastError().;
+        return false;
+    }
+
+    return DB::runMigrations();
 }

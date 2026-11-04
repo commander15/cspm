@@ -30,6 +30,7 @@ public:
     explicit PackageManager(Command *command, QObject *parent = nullptr);
 
     QUrl registryUrl() const;
+    static QString rootDir();
 
     bool fetchIndex();
     bool fetchMetas();
@@ -56,6 +57,9 @@ public:
 
 private:
     QUrl url(const QString &path) const;
+
+    QList<Package> getPackages(const QString &filters) const;
+    QList<PackageVersion> getPackageVersions(const QString &filters) const;
 
     ConsoleStreams console;
     Command *command;
