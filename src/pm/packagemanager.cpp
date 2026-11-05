@@ -74,6 +74,12 @@ bool PackageManager::fetchIndex()
         return false;
     }
 
+    QString message;
+    if (!JSON::validate((":/pm/json/schemas/registry_index.json"), response.data, &message)) {
+        console.err << message << Qt::endl;
+        return false;
+    }
+
     JSONError error;
     QJsonObject index = JSON::parse(response.data, &error).toObject();
     if (error.isValid()) {
@@ -138,6 +144,12 @@ bool PackageManager::fetchMetas()
         const HttpResponse response = HTTP::get(url(packageRemotePath + "/meta.json"), console);
         if (!response.success()) {
             console.err << response.errorString << Qt::endl;
+            continue;
+        }
+
+        QString msg;
+        if (!JSON::validate(":/pm/json/schemas/package_meta.json", response.data, &msg)) {
+            console.err << "invalid meta file for package " << packageName << ": " << msg << Qt::endl;
             continue;
         }
 

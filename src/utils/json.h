@@ -107,6 +107,9 @@ public:
     static QJsonValue parse(const QByteArray &json, JSONError *error = nullptr);
     static void fill(void *object, const QMetaObject &metaObject, const QJsonObject &data, JSONError *error = nullptr);
 
+    static bool validate(const QString &fileName, const QByteArray &jsonData, QString *message = nullptr);
+    static bool validateRaw(const QByteArray &schemaData, const QByteArray &jsonData, QString *message = nullptr);
+
     static QString fieldName(const QString &propertyName);
 
 private:

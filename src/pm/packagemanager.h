@@ -2,6 +2,7 @@
 #define PACKAGEMANAGER_H
 
 #include <core/command.h>
+#include <pm/packagedatabase.h>
 #include <pm/steps/packagestep.h>
 
 #include <QObject>
@@ -69,6 +70,8 @@ private:
     QString m_packagesTarget;
     QString m_packagesTemp;
     QJsonObject m_packagesCache;
+
+    PackageDatabase db;
 };
 
 

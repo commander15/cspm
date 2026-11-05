@@ -15,6 +15,7 @@ class Package
     Q_PROPERTY(QString description MEMBER description FINAL)
 
 public:
+    int id = 0;
     QString name;
     QString displayName;
     QString cmakeName;
@@ -32,6 +33,7 @@ class PackageDependency
 public:
     QString name() const { return names.value("default"); }
 
+    int id = 0;
     QHash<QString, QString> names;
     QString version;
     QString type;
@@ -119,6 +121,7 @@ class PackageVersion
     Q_PROPERTY(QString version MEMBER version FINAL)
 
 public:
+    int id = 0;
     QString version;
     QList<PackageDependency> dependencies;
     struct { PackageBuildData runtime; PackageBuildData dev; } build;

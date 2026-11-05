@@ -8,6 +8,21 @@
 #include <QSqlRecord>
 #include <QFile>
 
+bool DB::beginTransaction()
+{
+    return QSqlDatabase::database().transaction();
+}
+
+bool DB::commitTransaction()
+{
+    return QSqlDatabase::database().commit();
+}
+
+bool DB::rollbackTransaction()
+{
+    return QSqlDatabase::database().rollback();
+}
+
 QSqlError DB::select(const QString &statement, const QVariantList &params, const std::function<void (const QVariantHash &)> &callback)
 {
     const QString finalStatement = (statement.startsWith("SELECT", Qt::CaseInsensitive) ? statement : "SELECT " + statement);
@@ -32,6 +47,19 @@ QSqlError DB::insert(const QString &table, const QVariantMap &data, int *id)
     QString statement = "INSERT INTO " + table + "(" + columns.join(", ") + ") VALUES(" + values.join(", ") + ")";
     QSqlQuery query = run(statement, data.values(), ConsoleStreams::null());
     return query.lastError();
+}
+
+QSqlError DB::update(const QString &table, const QVariantMap &data, const QString &filter, int *count)
+{
+    return QSqlError();
+}
+
+QSqlError DB::deleteData(const QString &table, const QString &filter, int *count)
+{
+    QString statement = "DELETE FROM " + table;
+    if (!filter.isEmpty())
+        statement.append(" WHERE " + filter);
+    return run(statement, ConsoleStreams::null()).lastError();
 }
 
 QSqlQuery DB::run(const QString &statement)

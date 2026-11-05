@@ -14,21 +14,21 @@ CREATE TABLE IF NOT EXISTS packages (
     description TEXT
 );
 
-CREATE TABLE IF NOT EXISTS versions (
+CREATE TABLE IF NOT EXISTS package_versions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     package_id INTEGER NOT NULL,
     version TEXT NOT NULL,
     manifest_json TEXT NOT NULL, -- Cache the raw JSON manifest for quick execution
+    installed_at TIMESTAMP,
     FOREIGN KEY (package_id) REFERENCES packages(id) ON DELETE CASCADE,
     UNIQUE(package_id, version)
 );
 
-CREATE TABLE IF NOT EXISTS dependencies (
+CREATE TABLE IF NOT EXISTS package_dependencies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    version_id INTEGER NOT NULL,
-    dep_name TEXT NOT NULL,
-    constraint_str TEXT NOT NULL,
-    FOREIGN KEY (version_id) REFERENCES versions(id) ON DELETE CASCADE
+    dep_names TEXT NOT NULL,
+    dep_version TEXT,
+    dep_type TEXT NOT NULL
 );
 
 -- Full-Text Search virtual table for instant package discovery

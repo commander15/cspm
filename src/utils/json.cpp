@@ -1,9 +1,25 @@
 #include "json.h"
 
+#include <nlohmann/json-schema.hpp>
+#include <regex>
+
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QMetaProperty>
+
+using namespace nlohmann;
+using namespace nlohmann::json_schema;
+
+class custom_error_handler : public error_handler
+{
+public:
+    void error(const json::json_pointer &pointer, const json &json, const std::string &msg) override
+    { this->hasError = true; this->msg = msg; }
+
+    bool hasError = false;
+    std::string msg;
+};
 
 QJsonValue JSON::parse(const QString &fileName, JSONError *error)
 {
@@ -94,6 +110,73 @@ void JSON::fill(void *object, const QMetaObject &metaObject, const QJsonObject &
                     fillMethod.invokeOnGadget(object, data);
             }
         }
+    }
+}
+
+bool JSON::validate(const QString &fileName, const QByteArray &jsonData, QString *message)
+{
+    QFile f(fileName);
+    if (!f.open(QIODevice::ReadOnly)) {
+        if (message) {
+            *message = f.errorString();
+        }
+        return false;
+    }
+
+    return validateRaw(f.readAll(), jsonData, message);
+}
+
+bool JSON::validateRaw(const QByteArray &schemaData, const QByteArray &jsonData, QString *message)
+{
+    try {
+        // 1. Parse JSON data and schema
+        json schemaJson = json::parse(schemaData.constData());
+        json instanceJson = json::parse(jsonData.constData());
+
+        // 2. Define a custom format checker handler
+        auto format_checker = [](const std::string &format, const std::string &value) {
+            if (format == "regex") {
+                try {
+                    // Test if the string is a valid C++ regular expression
+                    std::regex pattern(value);
+                    return true;
+                } catch (...) {
+                    return false;
+                }
+            }
+            // For any other unknown formats, return true to avoid blocking validation
+            return true;
+        };
+
+        // 3. Initialize the validator with our custom format checker
+        json_validator validator(nullptr, format_checker);
+        validator.set_root_schema(schemaJson);
+
+        // 4. Validate the instance
+        custom_error_handler errorHandler;
+        validator.validate(instanceJson, errorHandler);
+
+        if (errorHandler.hasError) {
+            if (message)
+                *message = QString::fromUtf8(errorHandler.msg);
+            return false;
+        }
+
+        if (message) {
+            *message = "Validation successful.";
+        }
+        return true;
+
+    } catch (const std::exception &e) {
+        if (message) {
+            *message = QString::fromUtf8(e.what());
+        }
+        return false;
+    } catch (...) {
+        if (message) {
+            *message = "Unknown error occurred during JSON schema validation.";
+        }
+        return false;
     }
 }
 
