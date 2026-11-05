@@ -35,7 +35,7 @@ if (CSPM_REGISTRY_URL)
     target_compile_definitions(cspm PRIVATE CSPM_REGISTRY_URL="${CSPM_REGISTRY_URL}")
 endif()
 
-target_link_libraries(cspm PRIVATE Qt6::Core Qt6::Network Qt6::Sql)
+target_link_libraries(cspm PRIVATE Qt6::Core Qt6::Network Qt6::Sql nlohmann_json_schema_validator)
 
 include(GNUInstallDirs)
 install(TARGETS cspm RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

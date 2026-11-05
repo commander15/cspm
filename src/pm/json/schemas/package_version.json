@@ -1,0 +1,356 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema",
+  "title": "CSPM Package Version Manifest",
+  "description": "Comprehensive schema for package version manifests (v{version}.json)",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Package Version string (e.g., 1.0.0, 1.2.3.4)",
+      "pattern": "^\\d+(?:\\.\\d+){0,3}(?:-[0-9a-zA-Z.-]+)?$"
+    },
+    "dependencies": {
+      "type": "object",
+      "description": "Map of package dependencies mapping package names to version constraints",
+      "patternProperties": {
+        "^[a-z][a-z0-9_-]*$": {
+          "type": "string",
+          "pattern": "^(?:(>=|<=|>|<|\\^|~|==)\\s*)?\\d+(?:\\.\\d+){0,3}(?:-[0-9a-zA-Z.-]+)?$",
+          "description": "Version constraint string (e.g., >= 1.0.0, ^2.5, ~1.2)"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "build": {
+      "description": "Build configuration options tied to a specific build backend type",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "cmake"
+              ],
+              "description": "Build backend type"
+            },
+            "generator": {
+              "description": "CMake build generator (e.g., Ninja, Unix Makefiles)",
+              "$ref": "#/$defs/cmake_generator"
+            },
+            "targets": {
+              "$ref": "#/$defs/cmake_targets",
+              "description": "CMake build targets mapped per step"
+            },
+            "args": {
+              "$ref": "#/$defs/arguments",
+              "description": "Global CMake command-line arguments"
+            },
+            "vars": {
+              "$ref": "#/$defs/variables",
+              "description": "Global CMake variables"
+            },
+            "env": {
+              "$ref": "#/$defs/variables",
+              "description": "Global environment variables"
+            },
+            "runtime": {
+              "$ref": "#/$defs/cmake_sub_build",
+              "description": "CMake build options specifically for runtime target builds"
+            },
+            "dev": {
+              "$ref": "#/$defs/cmake_sub_build",
+              "description": "CMake build options specifically for development target builds"
+            },
+            "dependencies": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/build_dependency"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "description": "CMake Build"
+        }
+      ]
+    },
+    "artifacts": {
+      "type": "object",
+      "description": "Collection containing mandatory source code definition and optional pre-compiled binaries",
+      "properties": {
+        "source": {
+          "description": "Mandatory source package code retrieval configuration",
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "git"
+                  ],
+                  "description": "Artifact type must be strictly git"
+                },
+                "repository": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "URI link to the source repository"
+                },
+                "tag": {
+                  "type": "string",
+                  "description": "Specific Git tag to checkout"
+                },
+                "branch": {
+                  "type": "string",
+                  "description": "Specific Git branch to checkout"
+                },
+                "commit": {
+                  "type": "string",
+                  "description": "Specific Git commit"
+                }
+              },
+              "required": [
+                "type",
+                "repository"
+              ],
+              "description": "Git Repository"
+            }
+          ]
+        }
+      },
+      "patternProperties": {
+        "^(?!source$)[a-zA-Z_][a-zA-Z0-9-_]*$": {
+          "type": "object",
+          "description": "Pre-compiled binary artifact configuration identified by name",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "binary"
+              ],
+              "description": "Artifact type must be strictly binary"
+            },
+            "system": {
+              "type": "string",
+              "enum": [
+                "linux",
+                "windows",
+                "macos"
+              ],
+              "description": "Target operating system"
+            },
+            "arch": {
+              "type": "string",
+              "enum": [
+                "amd64",
+                "x86_64",
+                "arm",
+                "arm64"
+              ],
+              "description": "Target CPU architecture"
+            },
+            "toolchain": {
+              "type": "string",
+              "description": "Associated compiler toolchain identifier"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "description": "Direct download link to the binary archive"
+            },
+            "checksum": {
+              "pattern": "^([a-z0-9]+:)[a-fA-F0-9]{32,128}$",
+              "type": "string",
+              "description": "Cryptographic file checksum (format: algo:hash or raw hex)"
+            }
+          },
+          "required": [
+            "type",
+            "system",
+            "arch",
+            "url",
+            "checksum"
+          ]
+        }
+      },
+      "required": [
+        "source"
+      ]
+    }
+  },
+  "required": [
+    "version",
+    "build",
+    "artifacts"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "build_dependency": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]*$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "default": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]*$"
+                },
+                "linux": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]*$"
+                },
+                "windows": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]*$"
+                },
+                "macos": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z_][a-zA-Z0-9_.-]*$"
+                }
+              },
+              "required": [
+                "default"
+              ]
+            }
+          ]
+        },
+        "version": {
+          "type": "string",
+          "pattern": "\\d+(?:\\.\\d+){0,3}(?:-[0-9a-zA-Z.-]+)?$"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "default",
+            "pm"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "description": "Build Dependency"
+    },
+    "variables": {
+      "type": "object",
+      "description": "Map of valid variable names to string values",
+      "patternProperties": {
+        "^[a-zA-Z_][a-zA-Z0-9_]*$": {
+          "type": "string",
+          "description": "Variable value"
+        }
+      },
+      "properties": {}
+    },
+    "arguments": {
+      "type": "array",
+      "description": "List of command line string arguments",
+      "items": {
+        "type": "string",
+        "description": "Command line argument item"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "cmake_generator": {
+      "type": "string",
+      "enum": [
+        "Ninja"
+      ],
+      "description": "Allowed CMake generator engines"
+    },
+    "cmake_targets": {
+      "type": "object",
+      "description": "Mapping of CMake step targets",
+      "properties": {
+        "build": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Build step target name"
+          },
+          "description": "Targets for the build step",
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "test": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Test step target name"
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Targets for the test step"
+        },
+        "install": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Install step target name"
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Targets for the install step"
+        },
+        "package": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Package step target name"
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Targets for the package step"
+        },
+        "clean": {
+          "type": "array",
+          "description": "Targets for the clean step",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "cmake_sub_build": {
+      "type": "object",
+      "description": "Sub-build options maintaining order: generator, targets, args, vars, env",
+      "properties": {
+        "generator": {
+          "description": "Sub-build generator override",
+          "$ref": "#/$defs/cmake_generator"
+        },
+        "targets": {
+          "$ref": "#/$defs/cmake_targets",
+          "description": "Sub-build target overrides"
+        },
+        "args": {
+          "$ref": "#/$defs/arguments",
+          "description": "Sub-build command-line arguments"
+        },
+        "vars": {
+          "$ref": "#/$defs/variables",
+          "description": "Sub-build CMake variables"
+        },
+        "env": {
+          "$ref": "#/$defs/variables",
+          "description": "Sub-build environment variables"
+        }
+      }
+    }
+  }
+}

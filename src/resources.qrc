@@ -1,5 +1,8 @@
 <RCC>
     <qresource prefix="/">
         <file>db/migrations/00_initial_migration.sql</file>
+        <file>pm/json/schemas/package_meta.json</file>
+        <file>pm/json/schemas/package_version.json</file>
+        <file>pm/json/schemas/registry_index.json</file>
     </qresource>
 </RCC>

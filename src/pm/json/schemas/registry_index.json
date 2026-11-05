@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema",
+  "title": "Generated Schema",
+  "description": "Generated from JSON data",
+  "type": "object",
+  "properties": {
+    "registry_version": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "packages": {
+      "type": "object",
+      "properties": {
+        "^[a-z][a-z0-9_-]*$": {
+          "type": "object",
+          "properties": {
+            "display_name": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "latest": {
+              "type": "string",
+              "pattern": "^\\d+(?:\\.\\d+){0,3}(?:-[0-9a-zA-Z.-]+)?$"
+            },
+            "versions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^\\d+(?:\\.\\d+){0,3}(?:-[0-9a-zA-Z.-]+)?$"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "display_name",
+            "latest",
+            "versions",
+            "description"
+          ]
+        }
+      },
+      "required": []
+    }
+  },
+  "required": [
+    "packages",
+    "registry_version",
+    "updated_at"
+  ]
+}
