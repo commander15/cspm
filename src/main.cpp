@@ -2,6 +2,8 @@
 #include <QCommandLineParser>
 #include <QTimer>
 
+#include <QEloquent/connection.h>
+
 #include "core/command.h"
 #include "build/buildcommand.h"
 #include "utils/db.h"
@@ -70,10 +72,9 @@ int main(int argc, char *argv[])
 
 bool initDatabase(const QString &path)
 {
-    QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE");
-    db.setDatabaseName(path);
+    QEloquent::Connection con = QEloquent::Connection::addConnection(QSqlDatabase::defaultConnectionName(), "QSQLITE", path);
 
-    if (!db.open()) {
+    if (!con.open()) {
         //ConsoleStreams::std().out << db.lastError().;
         return false;
     }

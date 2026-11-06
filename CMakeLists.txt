@@ -2,10 +2,20 @@ cmake_minimum_required(VERSION 3.30)
 
 project(cspm VERSION 1.0.0)
 
-add_subdirectory(3rdparty)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Network Sql)
 
+# QTP0003: ensure BUILD_SHARED_LIBS is respected on Qt 6.7 and later
+if (${Qt6_VERSION} VERSION_GREATER_EQUAL 6.7.0)
+    qt_policy(SET QTP0003 NEW)
+endif()
+
+add_subdirectory(3rdparty)
 add_subdirectory(src)
 
 set(CPACK_PACKAGE_NAME "cspm")

@@ -6,7 +6,12 @@
 #include <QJsonObject>
 #include <QJsonArray>
 
-void Package::fill(const QJsonObject &data)
+Relation<PackageVersion> Package::versions() const
+{
+    return hasMany<PackageVersion>();
+}
+
+void Package::fillJson(const QJsonObject &data)
 {
     if (cmakeName.isEmpty())
         cmakeName = data.value("display_name").toString();

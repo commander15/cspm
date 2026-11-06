@@ -1,12 +1,13 @@
 #ifndef PACKAGE_H
 #define PACKAGE_H
 
+#include <core/model.h>
 #include <core/error.h>
 
 #include <QObject>
 #include <QVariantHash>
 
-class Package
+class Package : public Model, public ModelHelpers<Package>
 {
     Q_GADGET
     Q_PROPERTY(QString name MEMBER name FINAL)
@@ -15,13 +16,16 @@ class Package
     Q_PROPERTY(QString description MEMBER description FINAL)
 
 public:
-    int id = 0;
+    Package() : Model(this) {}
+
     QString name;
     QString displayName;
     QString cmakeName;
     QString description;
 
-    Q_INVOKABLE void fill(const QJsonObject &data);
+    Q_INVOKABLE Relation<class PackageVersion> versions() const;
+
+    Q_INVOKABLE void fillJson(const QJsonObject &data);
 };
 
 class PackageDependency
@@ -115,13 +119,12 @@ public:
     static PackageBuildData merge(const PackageBuildData &base, const PackageBuildData &other);
 };
 
-class PackageVersion
+class PackageVersion : public Model, public ModelHelpers<PackageVersion>
 {
     Q_GADGET
     Q_PROPERTY(QString version MEMBER version FINAL)
 
 public:
-    int id = 0;
     QString version;
     QList<PackageDependency> dependencies;
     struct { PackageBuildData runtime; PackageBuildData dev; } build;

@@ -74,6 +74,11 @@ bool PackageManager::fetchIndex()
         return false;
     }
 
+    auto p = Package::find(1);
+    if (p) {
+        auto versions = p->versions();
+    }
+
     QString message;
     if (!JSON::validate((":/pm/json/schemas/registry_index.json"), response.data, &message)) {
         console.err << message << Qt::endl;
